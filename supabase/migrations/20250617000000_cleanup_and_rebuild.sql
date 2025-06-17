@@ -5,6 +5,23 @@
   to avoid any conflicts with previous migrations.
 */
 
+
+
+-- TEMP FIX: Ensure 'profiles' exists early to prevent errors in later migrations
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT FROM pg_tables WHERE tablename = 'profiles'
+  ) THEN
+    CREATE TABLE profiles (
+      id UUID PRIMARY KEY
+    );
+  END IF;
+END $$;
+
+
+
+
 -- Start with a clean slate by dropping everything first
 DO $$
 BEGIN
