@@ -11,6 +11,7 @@ BEGIN
         FOR trigger_record IN 
             SELECT tgname FROM pg_trigger 
             WHERE tgrelid = 'profiles'::regclass::oid
+              AND NOT tgname LIKE 'RI_ConstraintTrigger%'
         LOOP
             EXECUTE 'DROP TRIGGER ' || quote_ident(trigger_record.tgname) || ' ON profiles CASCADE';
         END LOOP;
@@ -23,6 +24,7 @@ BEGIN
         FOR trigger_record IN 
             SELECT tgname FROM pg_trigger 
             WHERE tgrelid = 'saved_campaigns'::regclass::oid
+              AND NOT tgname LIKE 'RI_ConstraintTrigger%'
         LOOP
             EXECUTE 'DROP TRIGGER ' || quote_ident(trigger_record.tgname) || ' ON saved_campaigns CASCADE';
         END LOOP;
