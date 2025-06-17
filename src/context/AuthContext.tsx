@@ -65,36 +65,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      // 1. Sign up the user with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-    if (!error && data.user) {
-      // Create profile
+      if (error) {
+        return { error };
+      }
+
+      if (!data.user) {
+        return { error: new Error('User creation failed') };
+      }
+
+      // 2. Create a profile for the user
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert([
-          {
-            id: data.user.id,
-            email,
-            full_name: fullName,
-          },
-        ]);
+        .insert({
+          id: data.user.id,
+          email: email,
+          full_name: fullName,
+        });
 
-      return { error: profileError };
+      if (profileError) {
+        console.error('Error creating profile:', profileError);
+        // If profile creation fails, we should still return the user
+        // as they can try to create their profile again later
+        return { error: profileError };
+      }
+
+      return { error: null };
+    } catch (err) {
+      console.error('Unexpected error during sign up:', err);
+      return { error: err };
     }
-
-    return { error };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    return { error };
+      return { error };
+    } catch (err) {
+      console.error('Unexpected error during sign in:', err);
+      return { error: err };
+    }
   };
 
   const signOut = async () => {
@@ -109,9 +129,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .update(updates)
       .eq('id', user.id);
 
-    if (!error) {
+    if (!error && profile) {
       setProfile({
-        ...profile!,
+        ...profile,
         ...updates,
       });
     }

@@ -13,6 +13,7 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onSignInClick }) => 
   const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   
   const { signUp } = useAuth();
 
@@ -25,9 +26,13 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onSignInClick }) => 
       const { error } = await signUp(email, password, fullName);
       
       if (error) {
-        setError(error.message);
-      } else if (onSuccess) {
-        onSuccess();
+        console.error('Sign up error:', error);
+        setError(error.message || 'Failed to create account');
+      } else {
+        setSuccess(true);
+        setTimeout(() => {
+          if (onSuccess) onSuccess();
+        }, 2000);
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -36,6 +41,25 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess, onSignInClick }) => 
       setIsLoading(false);
     }
   };
+
+  if (success) {
+    return (
+      <div className="w-full max-w-md text-center">
+        <div className="bg-green-500/10 border border-green-500/30 text-green-400 px-4 py-6 rounded-lg mb-6">
+          <h3 className="text-xl font-bold mb-2">Account Created!</h3>
+          <p>Your account has been created successfully.</p>
+          <p className="mt-2">You can now sign in with your credentials.</p>
+        </div>
+        <button
+          onClick={onSignInClick}
+          className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 text-black 
+                   font-bold rounded-lg hover:from-yellow-300 hover:to-amber-400 transition-all duration-300"
+        >
+          Sign In Now
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-md">
