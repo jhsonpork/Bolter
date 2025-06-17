@@ -68,7 +68,7 @@ import IncomeStreamGenerator from './components/IncomeStreamGenerator';
 import InfographicWizard from './components/InfographicWizard';
 import DigitalProductGenerator from './components/DigitalProductGenerator';
 import CreatorCollabConnector from './components/CreatorCollabConnector';
-// NEW BUSINESS FEATURES
+// 10 NEW BUSINESS FEATURES
 import ContractClauseNegotiator from './components/ContractClauseNegotiator';
 import RegulationGapScanner from './components/RegulationGapScanner';
 import MonetizationMultiplier from './components/MonetizationMultiplier';
@@ -95,6 +95,8 @@ import PricingModal from './components/PricingModal';
 import Navigation from './components/Navigation';
 import { AdResult, SavedCampaign } from './types/ad';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import AuthModal from './components/auth/AuthModal';
+import UserMenu from './components/UserMenu';
 import { supabase } from './lib/supabase';
 
 type ActivePage = 'generator' | 'campaign' | 'rewriter' | 'saved' | 'email' | 'social' | 'influencer' | 'export' |
@@ -118,51 +120,56 @@ type ActivePage = 'generator' | 'campaign' | 'rewriter' | 'saved' | 'email' | 's
   'idea-to-company' | 'auto-ghostwriter' | 'decision-clarity' | 'breakpoint-fixer' | 'hyperpersona' |
   'perfect-pricing' | 'audience-trigger' | 'startup-strategy' | 'mini-saas' | 'distribution-stack';
 
-function AppContent() {
+const AppContent: React.FC = () => {
   const [activePage, setActivePage] = useState<ActivePage>('generator');
   const [generatedAd, setGeneratedAd] = useState<AdResult | null>(null);
   const [showPricing, setShowPricing] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [hasUsedFreeTrial, setHasUsedFreeTrial] = useState(false);
   const [savedCampaigns, setSavedCampaigns] = useState<SavedCampaign[]>([]);
+  
   const { user } = useAuth();
 
-  // Load saved campaigns from Supabase if user is logged in, otherwise from localStorage
+  // Load saved campaigns from Supabase when user is logged in
   useEffect(() => {
-    const loadCampaigns = async () => {
+    const loadSavedCampaigns = async () => {
       if (user) {
-        // Load from Supabase
-        const { data, error } = await supabase
-          .from('saved_campaigns')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        
-        if (error) {
-          console.error('Error loading campaigns from Supabase:', error);
-          return;
+        try {
+          const { data, error } = await supabase
+            .from('saved_campaigns')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+            
+          if (error) {
+            throw error;
+          }
+          
+          if (data) {
+            const campaigns: SavedCampaign[] = data.map(item => ({
+              id: item.id,
+              name: item.name,
+              ad: item.ad_data,
+              campaign: item.campaign_data,
+              createdAt: item.created_at,
+              type: item.type
+            }));
+            
+            setSavedCampaigns(campaigns);
+          }
+        } catch (error) {
+          console.error('Error loading saved campaigns:', error);
         }
-        
-        // Transform Supabase data to match SavedCampaign type
-        const campaigns: SavedCampaign[] = data.map(item => ({
-          id: item.id,
-          name: item.name,
-          ad: item.ad_data as AdResult | undefined,
-          campaign: item.campaign_data as any[] | undefined,
-          createdAt: item.created_at,
-          type: item.type as 'single' | 'campaign'
-        }));
-        
-        setSavedCampaigns(campaigns);
       } else {
-        // Load from localStorage
+        // If not logged in, load from localStorage as fallback
         const saved = localStorage.getItem('adrocket-campaigns');
         if (saved) {
           setSavedCampaigns(JSON.parse(saved));
         }
       }
     };
-    
-    loadCampaigns();
+
+    loadSavedCampaigns();
   }, [user]);
 
   const handleAdGenerated = async (ad: AdResult) => {
@@ -170,7 +177,7 @@ function AppContent() {
     // Disable this for now to make all features fully functional
     // setHasUsedFreeTrial(true);
     
-    // Create new campaign
+    // Save to campaigns
     const newCampaign: SavedCampaign = {
       id: Date.now().toString(),
       name: `${ad.businessType} Campaign`,
@@ -179,36 +186,58 @@ function AppContent() {
       type: 'single'
     };
     
-    // Save to state
     const updatedCampaigns = [newCampaign, ...savedCampaigns];
     setSavedCampaigns(updatedCampaigns);
     
-    // Save to Supabase if user is logged in, otherwise to localStorage
+    // Save to Supabase if logged in, otherwise to localStorage
     if (user) {
-      await supabase.from('saved_campaigns').insert({
-        user_id: user.id,
-        name: newCampaign.name,
-        ad_data: ad,
-        type: 'single',
-      });
+      try {
+        const { error } = await supabase
+          .from('saved_campaigns')
+          .insert({
+            user_id: user.id,
+            name: newCampaign.name,
+            ad_data: ad,
+            type: 'single',
+          });
+          
+        if (error) {
+          throw error;
+        }
+      } catch (error) {
+        console.error('Error saving campaign to Supabase:', error);
+        // Fallback to localStorage
+        localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+      }
     } else {
       localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
     }
   };
 
   const handleCampaignGenerated = async (campaign: SavedCampaign) => {
-    // Save to state
     const updatedCampaigns = [campaign, ...savedCampaigns];
     setSavedCampaigns(updatedCampaigns);
     
-    // Save to Supabase if user is logged in, otherwise to localStorage
+    // Save to Supabase if logged in, otherwise to localStorage
     if (user) {
-      await supabase.from('saved_campaigns').insert({
-        user_id: user.id,
-        name: campaign.name,
-        campaign_data: campaign.campaign,
-        type: 'campaign',
-      });
+      try {
+        const { error } = await supabase
+          .from('saved_campaigns')
+          .insert({
+            user_id: user.id,
+            name: campaign.name,
+            campaign_data: campaign.campaign,
+            type: 'campaign',
+          });
+          
+        if (error) {
+          throw error;
+        }
+      } catch (error) {
+        console.error('Error saving campaign to Supabase:', error);
+        // Fallback to localStorage
+        localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+      }
     } else {
       localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
     }
@@ -219,13 +248,26 @@ function AppContent() {
   };
 
   const handleDeleteCampaign = async (id: string) => {
-    // Remove from state
     const updatedCampaigns = savedCampaigns.filter(c => c.id !== id);
     setSavedCampaigns(updatedCampaigns);
     
-    // Remove from Supabase if user is logged in, otherwise from localStorage
+    // Delete from Supabase if logged in, otherwise from localStorage
     if (user) {
-      await supabase.from('saved_campaigns').delete().eq('id', id);
+      try {
+        const { error } = await supabase
+          .from('saved_campaigns')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+          
+        if (error) {
+          throw error;
+        }
+      } catch (error) {
+        console.error('Error deleting campaign from Supabase:', error);
+        // Fallback to localStorage
+        localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+      }
     } else {
       localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
     }
@@ -241,7 +283,10 @@ function AppContent() {
       </div>
 
       <div className="relative z-10">
-        <Header onUpgradeClick={handleUpgradeClick} />
+        <Header 
+          onUpgradeClick={handleUpgradeClick} 
+          onShowAuthModal={() => setShowAuthModal(true)}
+        />
         
         {activePage === 'generator' && !generatedAd && (
           <HeroSection />
@@ -852,10 +897,14 @@ function AppContent() {
         {showPricing && (
           <PricingModal onClose={() => setShowPricing(false)} />
         )}
+        
+        {showAuthModal && (
+          <AuthModal onClose={() => setShowAuthModal(false)} />
+        )}
       </div>
     </div>
   );
-}
+};
 
 function App() {
   return (
