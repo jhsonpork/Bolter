@@ -68,7 +68,7 @@ import IncomeStreamGenerator from './components/IncomeStreamGenerator';
 import InfographicWizard from './components/InfographicWizard';
 import DigitalProductGenerator from './components/DigitalProductGenerator';
 import CreatorCollabConnector from './components/CreatorCollabConnector';
-// 10 NEW BUSINESS FEATURES
+// NEW BUSINESS FEATURES
 import ContractClauseNegotiator from './components/ContractClauseNegotiator';
 import RegulationGapScanner from './components/RegulationGapScanner';
 import MonetizationMultiplier from './components/MonetizationMultiplier';
@@ -94,6 +94,8 @@ import DistributionStack from './components/DistributionStack';
 import PricingModal from './components/PricingModal';
 import Navigation from './components/Navigation';
 import { AdResult, SavedCampaign } from './types/ad';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { supabase } from './lib/supabase';
 
 type ActivePage = 'generator' | 'campaign' | 'rewriter' | 'saved' | 'email' | 'social' | 'influencer' | 'export' |
   'comparator' | 'personas' | 'angles' | 'trend-rewriter' | 'ab-variations' | 'tone-polisher' | 'campaign-pack' | 'hook-analyzer' |
@@ -116,27 +118,59 @@ type ActivePage = 'generator' | 'campaign' | 'rewriter' | 'saved' | 'email' | 's
   'idea-to-company' | 'auto-ghostwriter' | 'decision-clarity' | 'breakpoint-fixer' | 'hyperpersona' |
   'perfect-pricing' | 'audience-trigger' | 'startup-strategy' | 'mini-saas' | 'distribution-stack';
 
-function App() {
+function AppContent() {
   const [activePage, setActivePage] = useState<ActivePage>('generator');
   const [generatedAd, setGeneratedAd] = useState<AdResult | null>(null);
   const [showPricing, setShowPricing] = useState(false);
   const [hasUsedFreeTrial, setHasUsedFreeTrial] = useState(false);
   const [savedCampaigns, setSavedCampaigns] = useState<SavedCampaign[]>([]);
+  const { user } = useAuth();
 
-  // Load saved campaigns from localStorage
+  // Load saved campaigns from Supabase if user is logged in, otherwise from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('adrocket-campaigns');
-    if (saved) {
-      setSavedCampaigns(JSON.parse(saved));
-    }
-  }, []);
+    const loadCampaigns = async () => {
+      if (user) {
+        // Load from Supabase
+        const { data, error } = await supabase
+          .from('saved_campaigns')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error loading campaigns from Supabase:', error);
+          return;
+        }
+        
+        // Transform Supabase data to match SavedCampaign type
+        const campaigns: SavedCampaign[] = data.map(item => ({
+          id: item.id,
+          name: item.name,
+          ad: item.ad_data as AdResult | undefined,
+          campaign: item.campaign_data as any[] | undefined,
+          createdAt: item.created_at,
+          type: item.type as 'single' | 'campaign'
+        }));
+        
+        setSavedCampaigns(campaigns);
+      } else {
+        // Load from localStorage
+        const saved = localStorage.getItem('adrocket-campaigns');
+        if (saved) {
+          setSavedCampaigns(JSON.parse(saved));
+        }
+      }
+    };
+    
+    loadCampaigns();
+  }, [user]);
 
-  const handleAdGenerated = (ad: AdResult) => {
+  const handleAdGenerated = async (ad: AdResult) => {
     setGeneratedAd(ad);
     // Disable this for now to make all features fully functional
     // setHasUsedFreeTrial(true);
     
-    // Save to campaigns
+    // Create new campaign
     const newCampaign: SavedCampaign = {
       id: Date.now().toString(),
       name: `${ad.businessType} Campaign`,
@@ -145,25 +179,56 @@ function App() {
       type: 'single'
     };
     
+    // Save to state
     const updatedCampaigns = [newCampaign, ...savedCampaigns];
     setSavedCampaigns(updatedCampaigns);
-    localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+    
+    // Save to Supabase if user is logged in, otherwise to localStorage
+    if (user) {
+      await supabase.from('saved_campaigns').insert({
+        user_id: user.id,
+        name: newCampaign.name,
+        ad_data: ad,
+        type: 'single',
+      });
+    } else {
+      localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+    }
   };
 
-  const handleCampaignGenerated = (campaign: SavedCampaign) => {
+  const handleCampaignGenerated = async (campaign: SavedCampaign) => {
+    // Save to state
     const updatedCampaigns = [campaign, ...savedCampaigns];
     setSavedCampaigns(updatedCampaigns);
-    localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+    
+    // Save to Supabase if user is logged in, otherwise to localStorage
+    if (user) {
+      await supabase.from('saved_campaigns').insert({
+        user_id: user.id,
+        name: campaign.name,
+        campaign_data: campaign.campaign,
+        type: 'campaign',
+      });
+    } else {
+      localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+    }
   };
 
   const handleUpgradeClick = () => {
     setShowPricing(true);
   };
 
-  const handleDeleteCampaign = (id: string) => {
+  const handleDeleteCampaign = async (id: string) => {
+    // Remove from state
     const updatedCampaigns = savedCampaigns.filter(c => c.id !== id);
     setSavedCampaigns(updatedCampaigns);
-    localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+    
+    // Remove from Supabase if user is logged in, otherwise from localStorage
+    if (user) {
+      await supabase.from('saved_campaigns').delete().eq('id', id);
+    } else {
+      localStorage.setItem('adrocket-campaigns', JSON.stringify(updatedCampaigns));
+    }
   };
 
   return (
@@ -789,6 +854,14 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
