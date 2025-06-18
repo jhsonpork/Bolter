@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
       setError(null);
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -53,25 +53,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         throw error;
-      }
-
-      // Create profile entry
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: data.user.id,
-              email: email,
-              full_name: fullName,
-              created_at: new Date().toISOString(),
-            },
-          ]);
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-          // Don't throw here, as the user is already created
-        }
       }
     } catch (error: any) {
       console.error('Sign up error:', error);
